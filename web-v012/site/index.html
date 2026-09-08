@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#0b1f33" />
+  <meta name="description" content="Mon Énergie — suivi intelligent des compteurs électriques prépayés." />
+  <title>Mon Énergie</title>
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand">
+        <div class="brand-mark">⚡</div>
+        <div><strong>Mon Énergie</strong><span>Suivi prépayé</span></div>
+      </div>
+      <nav class="nav" aria-label="Navigation principale">
+        <button class="nav-item active" data-view="dashboard"><span>⌂</span> Tableau de bord</button>
+        <button class="nav-item" data-view="analytics"><span>⌁</span> Analyses</button>
+        <button class="nav-item" data-view="readings"><span>▣</span> Relevés</button>
+        <button class="nav-item" data-view="recharges"><span>⚡</span> Recharges</button>
+        <button class="nav-item" data-view="meters"><span>▤</span> Compteurs</button>
+        <button class="nav-item" data-view="settings"><span>⚙</span> Paramètres</button>
+      </nav>
+      <div class="sidebar-footer">
+        <div class="tiny-label">Version web</div>
+        <strong>0.1.2</strong>
+        <a class="text-link" href="https://github.com/ryko95/Mon-Energie/actions" target="_blank" rel="noopener">Télécharger l’APK</a>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="Ouvrir le menu">☰</button>
+        <div class="topbar-title"><span class="eyebrow">Gestion énergétique</span><h1 id="pageTitle">Tableau de bord</h1></div>
+        <div class="topbar-actions">
+          <select id="meterSelect" aria-label="Compteur actif"></select>
+          <button class="icon-btn" id="installBtn" title="Installer l’application web" hidden>⇩</button>
+          <button class="avatar" aria-label="Profil">ME</button>
+        </div>
+      </header>
+
+      <section class="content" id="viewRoot"></section>
+    </main>
+  </div>
+
+  <nav class="mobile-nav" aria-label="Navigation mobile">
+    <button class="mobile-nav-item active" data-view="dashboard">⌂<span>Accueil</span></button>
+    <button class="mobile-nav-item" data-view="analytics">⌁<span>Analyse</span></button>
+    <button class="mobile-nav-item" data-view="readings">＋<span>Relevé</span></button>
+    <button class="mobile-nav-item" data-view="recharges">⚡<span>Recharge</span></button>
+    <button class="mobile-nav-item" data-view="settings">⚙<span>Réglages</span></button>
+  </nav>
+
+  <dialog id="modal" class="modal"><div id="modalBody"></div></dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="app.js" defer></script>
+</body>
+</html>
