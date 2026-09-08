@@ -1,0 +1,79 @@
+name: Assemble Mon Energie Web v0.1.2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/assemble-web-v012.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  assemble:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Assemble clean v0.1.2 source
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/mon-web /tmp/mon-energie-old.zip /tmp/Mon-Energie-Web-v0.1.2.zip
+          mkdir -p /tmp/mon-web
+
+          git show fc46a774b238782c90f011fbeb23d3516d55e85a:web-source/web.part00.b64 \
+            | tr -cd 'A-Za-z0-9+/=' \
+            | base64 -d > /tmp/mon-energie-old.zip
+
+          unzip -q /tmp/mon-energie-old.zip -d /tmp/mon-web
+          test -f /tmp/mon-web/mon-energie-web/index.html
+
+          cat web-v012/app.part*.b64 \
+            | tr -d '\n\r' \
+            | base64 -d \
+            | gzip -d > /tmp/mon-web/mon-energie-web/app.js
+
+          node --check /tmp/mon-web/mon-energie-web/app.js
+
+          sed -i "s/const CACHE='monenergie-web-v1'/const CACHE='monenergie-web-v2'/" \
+            /tmp/mon-web/mon-energie-web/service-worker.js
+
+          cat > /tmp/mon-web/mon-energie-web/README.md <<'EOF'
+          # Mon Énergie — Web v0.1.2
+
+          Web-app/PWA responsive de suivi des compteurs électriques prépayés.
+
+          - aucune donnée fictive au démarrage ;
+          - retrait automatique des anciens relevés/recharges de démonstration connus ;
+          - conservation des données réellement saisies ;
+          - mise à zéro du compteur depuis Relevés ;
+          - suppression individuelle d'un ancien relevé avec confirmation ;
+          - recalcul automatique des indicateurs après suppression ;
+          - absence de fausse alerte critique lorsqu'aucun relevé réel n'existe.
+          EOF
+
+          cd /tmp/mon-web
+          zip -qr /tmp/Mon-Energie-Web-v0.1.2.zip mon-energie-web
+          unzip -t /tmp/Mon-Energie-Web-v0.1.2.zip >/dev/null
+
+          base64 -w0 /tmp/Mon-Energie-Web-v0.1.2.zip > "$GITHUB_WORKSPACE/web-source/web.part00.b64"
+          rm -f "$GITHUB_WORKSPACE"/web-source/web.part0[1-9].b64
+
+      - name: Commit clean web source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add web-source/
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Assembler Mon Energie Web v0.1.2"
+            git push
+          fi
