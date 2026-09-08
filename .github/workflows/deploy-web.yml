@@ -1,0 +1,57 @@
+name: Deploy Mon Energie Web
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'web-source/**'
+      - '.github/workflows/deploy-web.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Rebuild website
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p _site
+          cat web-source/web.part*.b64 | tr -d '\n\r' | base64 -d > mon-energie-web.zip
+          unzip -q mon-energie-web.zip
+          cp -R mon-energie-web/. _site/
+          touch _site/.nojekyll
+          test -f _site/index.html
+          test -f _site/app.js
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
