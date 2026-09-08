@@ -1,0 +1,76 @@
+name: Repair Mon Energie Web v0.1.2
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/repair-web-v012.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout full history
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Rebuild v0.1.2 from last valid web archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/mon-web /tmp/mon-energie-web.zip
+          mkdir -p /tmp/mon-web
+          git show fc46a774b238782c90f011fbeb23d3516d55e85a:web-source/web.part00.b64 | tr -d '\n\r' | base64 -d > /tmp/mon-energie-web.zip
+          cd /tmp/mon-web
+          unzip -q /tmp/mon-energie-web.zip
+          python - <<'PY'
+          from pathlib import Path
+          root=Path('/tmp/mon-web/mon-energie-web')
+          p=root/'app.js'
+          s=p.read_text()
+          old="""const STORAGE_KEY='monenergie_web_v1';\nconst seed={settings:{lowKwh:15,criticalKwh:7,budget:25000,alerts:true},activeMeter:'m1',meters:[{id:'m1',name:'Maison Bouaké',number:'CI-45892167',location:'Bouaké',created:'2026-08-01'},{id:'m2',name:'Bureau',number:'CI-77124590',location:'Bouaké',created:'2026-08-19'}],readings:[{id:'r1',meterId:'m1',date:'2026-09-01T08:00',kwh:45,method:'Manuel'},{id:'r2',meterId:'m1',date:'2026-09-03T18:30',kwh:33.5,method:'Manuel'},{id:'r3',meterId:'m1',date:'2026-09-06T09:10',kwh:52.6,method:'Photo'},{id:'r4',meterId:'m1',date:'2026-09-08T12:15',kwh:34.6,method:'Manuel'},{id:'r5',meterId:'m2',date:'2026-09-04T11:00',kwh:29.2,method:'Manuel'},{id:'r6',meterId:'m2',date:'2026-09-08T09:00',kwh:21.4,method:'Manuel'}],recharges:[{id:'c1',meterId:'m1',date:'2026-09-05T14:20',amount:10000,kwh:30,channel:'Wave',tokenLast4:'7890'},{id:'c2',meterId:'m1',date:'2026-08-25T10:00',amount:7500,kwh:23.4,channel:'Orange Money',tokenLast4:'1428'},{id:'c3',meterId:'m2',date:'2026-09-02T16:00',amount:5000,kwh:15.8,channel:'MTN MoMo',tokenLast4:'8831'}]};\nlet state=loadState();let currentView='dashboard';let deferredInstallPrompt=null;\nfunction loadState(){try{return JSON.parse(localStorage.getItem(STORAGE_KEY))||structuredClone(seed)}catch{return structuredClone(seed)}}\n"""
+          new="""const STORAGE_KEY='monenergie_web_v2';\nconst LEGACY_STORAGE_KEY='monenergie_web_v1';\nconst DEMO_READING_IDS=new Set(['r1','r2','r3','r4','r5','r6']);\nconst DEMO_RECHARGE_IDS=new Set(['c1','c2','c3']);\nconst seed={settings:{lowKwh:15,criticalKwh:7,budget:0,alerts:true},activeMeter:'m1',meters:[{id:'m1',name:'Mon compteur',number:'Non renseigné',location:'Non renseignée',created:new Date().toISOString()}],readings:[],recharges:[]};\nlet state=loadState();let currentView='dashboard';let deferredInstallPrompt=null;\nfunction normalizeState(data){const d=data&&typeof data==='object'?data:{};const out={settings:{...seed.settings,...(d.settings||{})},activeMeter:d.activeMeter,meters:Array.isArray(d.meters)?d.meters:[],readings:Array.isArray(d.readings)?d.readings:[],recharges:Array.isArray(d.recharges)?d.recharges:[]};if(!out.meters.length){out.meters=structuredClone(seed.meters);out.activeMeter=out.meters[0].id}if(!out.meters.some(m=>m.id===out.activeMeter))out.activeMeter=out.meters[0].id;return out}\nfunction migrateLegacy(data){const d=normalizeState(data);d.readings=d.readings.filter(r=>!DEMO_READING_IDS.has(r.id));d.recharges=d.recharges.filter(r=>!DEMO_RECHARGE_IDS.has(r.id));const used=new Set([...d.readings.map(r=>r.meterId),...d.recharges.map(r=>r.meterId)]);d.meters=d.meters.filter(m=>!['m1','m2'].includes(m.id)||used.has(m.id));if(!d.meters.length){d.meters=structuredClone(seed.meters);d.activeMeter=d.meters[0].id}else if(!d.meters.some(m=>m.id===d.activeMeter)){d.activeMeter=d.meters[0].id}return d}\nfunction loadState(){try{const current=localStorage.getItem(STORAGE_KEY);if(current)return normalizeState(JSON.parse(current));const legacy=localStorage.getItem(LEGACY_STORAGE_KEY);if(legacy){const migrated=migrateLegacy(JSON.parse(legacy));localStorage.setItem(STORAGE_KEY,JSON.stringify(migrated));return migrated}return structuredClone(seed)}catch{return structuredClone(seed)}}\n"""
+          if old not in s: raise SystemExit('seed block not found')
+          s=s.replace(old,new)
+          s=s.replace("function renderDashboard(root){const m=activeMeter(),s=stats(),b=balance();const pct=Math.min(100,(b/Math.max(state.settings.lowKwh*3,1))*100);const status=b<=state.settings.criticalKwh?'Critique':b<=state.settings.lowKwh?'Faible':'Correct';const cls=status==='Correct'?'good':status==='Faible'?'warn':'danger';","function renderDashboard(root){const m=activeMeter(),s=stats(),b=balance(),hasReading=readingsFor().length>0;const pct=hasReading?Math.min(100,(b/Math.max(state.settings.lowKwh*3,1))*100):0;const status=!hasReading?'Aucun relevé':b<=state.settings.criticalKwh?'Critique':b<=state.settings.lowKwh?'Faible':'Correct';const cls=status==='Correct'?'good':status==='Faible'?'warn':status==='Aucun relevé'?'':'danger';")
+          s=s.replace('<div class="delta">Dernier relevé enregistré</div>','<div class="delta">${hasReading?\'Dernier relevé enregistré\':\'Aucune donnée saisie\'}</div>')
+          s=s.replace("function alertHtml(b,s){if(!state.settings.alerts)return`<div class=\"empty\">Les alertes sont désactivées.</div>`;","function alertHtml(b,s){if(!readingsFor().length)return`<div class=\"empty\"><strong>Aucun relevé</strong><br>Ajoutez votre premier relevé réel pour activer les alertes et les estimations.</div>`;if(!state.settings.alerts)return`<div class=\"empty\">Les alertes sont désactivées.</div>`;")
+          s=s.replace("function tableReadings(rows){if(!rows.length)return`<div class=\"empty\">Aucun relevé.</div>`;return`<div class=\"table-wrap\"><table class=\"table\"><thead><tr><th>Date</th><th>Solde</th><th>Méthode</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${dateFR(r.date)}</td><td><strong>${fmt(r.kwh)} kWh</strong></td><td><span class=\"status-dot\"></span>${escapeHtml(r.method)}</td></tr>`).join('')}</tbody></table></div>`}","function tableReadings(rows,withActions=false){if(!rows.length)return`<div class=\"empty\">Aucun relevé enregistré.</div>`;return`<div class=\"table-wrap\"><table class=\"table\"><thead><tr><th>Date</th><th>Solde</th><th>Méthode</th>${withActions?'<th>Action</th>':''}</tr></thead><tbody>${rows.map(r=>`<tr><td>${dateFR(r.date)}</td><td><strong>${fmt(r.kwh)} kWh</strong></td><td><span class=\"status-dot\"></span>${escapeHtml(r.method)}</td>${withActions?`<td><button class=\"btn btn-danger\" style=\"padding:7px 10px\" onclick=\"deleteReading('${r.id}')\">Supprimer</button></td>`:''}</tr>`).join('')}</tbody></table></div>`}")
+          s=s.replace("${tableReadings(readingsFor().slice().reverse())}</article>`}","${tableReadings(readingsFor().slice().reverse(),true)}</article>`}")
+          s=s.replace('onclick="resetDemo()">Réinitialiser les données démo</button>','onclick="resetData()">Effacer toutes les données</button>')
+          s=s.replace("function resetDemo(){state=structuredClone(seed);saveState();toast('Données de démonstration restaurées');render()}","function resetData(){if(!confirm('Effacer tous les compteurs, relevés et recharges enregistrés ? Cette action est irréversible.'))return;state=structuredClone(seed);saveState();toast('Données effacées');render()}")
+          marker='\nfunction openRecharge(){'
+          insert="""\nfunction deleteReading(id){const reading=state.readings.find(r=>r.id===id);if(!reading)return;openModal(`<div class=\"modal-inner\">${modalHead('Supprimer le relevé')}<div class=\"alert\"><strong>Confirmation</strong><p>Supprimer le relevé du ${dateFR(reading.date)} à ${fmt(reading.kwh)} kWh ? Les statistiques seront recalculées automatiquement.</p></div><div class=\"actions\"><button class=\"btn btn-danger\" id=\"confirmDeleteReading\">Supprimer définitivement</button><button class=\"btn btn-secondary\" type=\"button\" onclick=\"closeModal()\">Annuler</button></div></div>`);document.querySelector('#confirmDeleteReading').addEventListener('click',()=>{state.readings=state.readings.filter(r=>r.id!==id);saveState();closeModal();toast('Relevé supprimé');render()})}\n"""
+          if marker not in s: raise SystemExit('openRecharge marker missing')
+          s=s.replace(marker,insert+marker,1)
+          s=s.replace('placeholder="10000"','placeholder="Montant payé"').replace('placeholder="30"','placeholder="kWh reçus"').replace('placeholder="7890"','placeholder="4 derniers chiffres"').replace('placeholder="Ex. 34,6"','placeholder="Valeur affichée"')
+          s=s.replace('window.navigate=navigate;window.openReading=openReading;window.setMeterZero=setMeterZero;window.openRecharge=openRecharge;window.openMeter=openMeter;window.closeModal=closeModal;window.selectMeter=selectMeter;window.resetDemo=resetDemo;','window.navigate=navigate;window.openReading=openReading;window.setMeterZero=setMeterZero;window.deleteReading=deleteReading;window.openRecharge=openRecharge;window.openMeter=openMeter;window.closeModal=closeModal;window.selectMeter=selectMeter;window.resetData=resetData;')
+          p.write_text(s)
+          sw=root/'service-worker.js'
+          sw.write_text(sw.read_text().replace("const CACHE='monenergie-web-v1'","const CACHE='monenergie-web-v2'"))
+          (root/'README.md').write_text('''# Mon Énergie — Web\n\nWeb-app/PWA responsive pour le suivi de compteurs électriques prépayés.\n\nLa version v0.1.2 démarre sans relevés ni recharges fictifs. Les anciennes données de démonstration connues sont retirées lors de la migration.\n\nDans Relevés : saisie réelle, mise à zéro, suppression individuelle avec confirmation et recalcul automatique.\n''')
+          PY
+          node --check /tmp/mon-web/mon-energie-web/app.js
+          cd /tmp/mon-web
+          zip -qr /tmp/Mon-Energie-Web-v0.1.2.zip mon-energie-web
+          base64 -w0 /tmp/Mon-Energie-Web-v0.1.2.zip > "$GITHUB_WORKSPACE/web-source/web.part00.b64"
+          rm -f "$GITHUB_WORKSPACE"/web-source/web.part0[1-9].b64
+
+      - name: Commit repaired source
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add web-source/
+          if git diff --cached --quiet; then
+            echo "No source changes"
+          else
+            git commit -m "Réparer la web-app Mon Energie v0.1.2"
+            git push
+          fi
